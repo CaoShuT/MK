@@ -94,7 +94,8 @@ class MCSimulator:
             n_alive = len(idx)
 
             # 采样自由程：s = -ln(R) / sigma_t
-            s = -np.log(rng.random(n_alive) + 1e-30) / (sigma_t + 1e-30)
+            # rng.random() 返回 (0, 1) 开区间值，无需额外 epsilon
+            s = -np.log(rng.random(n_alive)) / sigma_t
 
             # 记录旧位置
             z_old = z[idx].copy()
@@ -123,10 +124,10 @@ class MCSimulator:
                 muy_c = muy[cross_idx]
                 s_c = s[mask_in_alive]
 
-                # 反算到达 z=L 的精确比例 t：z_old + t*s*muz = L
+                # 反算到达 z=L 的精确比例 t：z_old + t*dz = L
                 dz = z_c_new - z_c_old
                 safe_dz = np.abs(dz) > 1e-30
-                t_frac = np.where(safe_dz, (L - z_c_old) / (dz + 1e-30), 0.0)
+                t_frac = np.where(safe_dz, (L - z_c_old) / dz, 0.0)
                 t_frac = np.clip(t_frac, 0.0, 1.0)
 
                 x_hit = x_c - (1.0 - t_frac) * s_c * mux_c

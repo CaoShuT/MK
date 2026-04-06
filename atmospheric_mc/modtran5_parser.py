@@ -222,14 +222,17 @@ class MODTRAN5Parser:
                 'T_scatter':     散射透过率（来自 THRML_SCT + SOL_SCAT，若存在）
                 'wavenumber_used': 实际使用的波数 [cm⁻¹]
         """
+        if wavelength_um <= 0:
+            raise ValueError(f'wavelength_um 必须大于 0，实际值: {wavelength_um}')
+
+        wavenumber = 10000.0 / wavelength_um
+
         if tp7_df.empty:
             return {
                 'sigma_t': 1.0, 'omega_0': 0.9,
                 'T_total': 0.5, 'T_scatter': 0.1,
-                'wavenumber_used': 10000.0 / (wavelength_um + 1e-30),
+                'wavenumber_used': wavenumber,
             }
-
-        wavenumber = 10000.0 / (wavelength_um + 1e-30)
 
         # 获取 FREQ 列（第一列）
         freq_col = tp7_df.columns[0]
@@ -289,7 +292,10 @@ class MODTRAN5Parser:
         if plt_df.empty or len(plt_df) < 2:
             return 0.0
 
-        wavenumber = 10000.0 / (wavelength_um + 1e-30)
+        if wavelength_um <= 0:
+            raise ValueError(f'wavelength_um 必须大于 0，实际值: {wavelength_um}')
+
+        wavenumber = 10000.0 / wavelength_um
         wn = plt_df['wavenumber'].values
         rad = plt_df['radiance'].values
 

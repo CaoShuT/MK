@@ -86,8 +86,10 @@ class ImageDegradation:
         """
         c1 = 1.19104e8   # W·μm⁴/(m²·sr)
         c2 = 1.43878e4   # μm·K
+        if T_K <= 0 or wavelength_um <= 0:
+            return 0.0
         lam = wavelength_um
-        exponent = c2 / (lam * T_K + 1e-30)
+        exponent = c2 / (lam * T_K)
         # 防止溢出
         exponent = np.clip(exponent, 0.0, 700.0)
         return c1 / (lam ** 5 * (np.exp(exponent) - 1.0 + 1e-30))

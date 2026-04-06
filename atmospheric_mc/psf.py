@@ -123,16 +123,25 @@ class PSFAnalyzer:
         for i in range(len(profile) - 1):
             if profile[i] <= half_max <= profile[i + 1]:
                 # 线性插值
-                t = (half_max - profile[i]) / (profile[i + 1] - profile[i] + 1e-30)
-                left = xc[i] + t * (xc[i + 1] - xc[i])
+                delta = profile[i + 1] - profile[i]
+                if abs(delta) < 1e-30:
+                    # 平坦段，取中点
+                    left = 0.5 * (xc[i] + xc[i + 1])
+                else:
+                    t = (half_max - profile[i]) / delta
+                    left = xc[i] + t * (xc[i + 1] - xc[i])
                 break
 
         # 找右侧越过半高的位置（从右向左扫描，找第一个下降过半高的点）
         right = None
         for i in range(len(profile) - 1, 0, -1):
             if profile[i - 1] >= half_max >= profile[i]:
-                t = (half_max - profile[i - 1]) / (profile[i] - profile[i - 1] + 1e-30)
-                right = xc[i - 1] + t * (xc[i] - xc[i - 1])
+                delta = profile[i] - profile[i - 1]
+                if abs(delta) < 1e-30:
+                    right = 0.5 * (xc[i - 1] + xc[i])
+                else:
+                    t = (half_max - profile[i - 1]) / delta
+                    right = xc[i - 1] + t * (xc[i] - xc[i - 1])
                 break
 
         if left is None or right is None:
