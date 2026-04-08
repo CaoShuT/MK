@@ -51,6 +51,35 @@ python main.py --mode modtran --tp7 file.tp7 --plt file.plt --image scene.npy
 python main.py --mode modtran --tp7 file.tp7 --wavelength 10.0 --distance 1.0 --n_photons 2000000
 ```
 
+### 模式C：已有图像与 PSF 直接卷积退化
+
+无需蒙特卡洛仿真，直接将已有图像文件和 PSF 文件进行卷积退化：
+
+```bash
+# 最简用法（T_total=1.0, L_path=0.0，输出自动命名为 image_degraded.npy）
+python main.py --mode convolve --image image.npy --psf psf.npy
+
+# 指定透过率和路径辐射，输出为 .npy
+python main.py --mode convolve --image image.png --psf psf.npy --t_total 0.75 --l_path 0.02 --output result.npy
+
+# 输出为图像格式（值域自动归一化至 0~255）
+python main.py --mode convolve --image image.png --psf psf.npy --output result.png
+```
+
+**支持的输入格式：**
+
+| 参数 | 支持格式 |
+|------|----------|
+| `--image` | `.npy`、`.png`、`.jpg`、`.jpeg`、`.tif`、`.tiff` |
+| `--psf` | `.npy`、`.png`、`.jpg`、`.jpeg`、`.tif`、`.tiff` |
+| `--output` | `.npy`（原始 float64）或 `.png`/`.jpg`/`.tif`（归一化 uint8）|
+
+**说明：**
+- PSF 会自动做非负截断（负值置零）并重新归一化（积分 = 1）
+- RGB/RGBA 图像自动转换为灰度（取前三通道均值）
+- 退化公式：`I_deg = T_total × (I ⊗ PSF) + L_path`
+- 若不指定 `--output`，输出文件名自动由输入文件名生成，例如 `image.npy` → `image_degraded.npy`
+
 ---
 
 ## 物理模型说明
