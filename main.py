@@ -1,17 +1,22 @@
 """
 红外图像大气传输效应蒙特卡洛仿真系统 - 主入口脚本。
 
-支持两种运行模式：
+支持三种运行模式：
   mc       纯蒙特卡洛演示（无需 MODTRAN5 文件）
   modtran  基于 MODTRAN5 输出的优化仿真
+  convolve 将已有图像与已有 PSF 直接做卷积退化
 
 用法示例：
     python main.py --mode mc --fog medium --wavelength 10.0 --distance 1.0 --n_photons 1000000
     python main.py --mode modtran --tp7 file.tp7 --plt file.plt --wavelength 10.0 --distance 1.0
     python main.py --mode modtran --tp7 file.tp7 --plt file.plt --image scene.npy
+    python main.py --mode convolve --image image.npy --psf psf.npy
+    python main.py --mode convolve --image image.png --psf psf.npy --t_total 0.75 --l_path 0.02 --output result.npy
+    python main.py --mode convolve --image image.png --psf psf.npy --output result.png
 """
 
 import argparse
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -311,6 +316,53 @@ def run_modtran_optimized(args):
 
 
 # ─────────────────────────────────────────────────────────
+# 模式C：已有图像 + 已有 PSF 直接卷积退化
+# ─────────────────────────────────────────────────────────
+
+def run_convolve_mode(args):
+    """
+    模式C：将已有图像与已有 PSF 直接做卷积退化。
+
+    步骤：
+    1. 加载图像（支持 .npy / .png / .jpg / .jpeg / .tif / .tiff）
+    2. 加载 PSF 并做非负截断与归一化
+    3. 调用大气退化模型：I_deg = T_total * (I ⊗ PSF) + L_path
+    4. 保存结果
+
+    Args:
+        args: argparse 命令行参数
+    """
+    print('='*60)
+    print('模式C：已有图像与 PSF 直接卷积退化')
+    print('='*60)
+
+    degrader = ImageDegradation()
+
+    print(f'\n加载图像：{args.image}')
+    image = degrader.load_image(args.image)
+    print(f'  图像尺寸：{image.shape}，值域：[{image.min():.4g}, {image.max():.4g}]')
+
+    print(f'加载 PSF：{args.psf}')
+    psf = degrader.load_psf(args.psf)
+    print(f'  PSF 尺寸：{psf.shape}，归一化和：{psf.sum():.6f}')
+
+    print(f'\n退化参数：T_total={args.t_total}, L_path={args.l_path}')
+    degraded = degrader.degrade(image, psf, T_total=args.t_total, L_path=args.l_path)
+    print(f'  退化图像尺寸：{degraded.shape}，值域：[{degraded.min():.4g}, {degraded.max():.4g}]')
+
+    # 确定输出路径
+    if args.output:
+        output_path = args.output
+    else:
+        base, ext = os.path.splitext(args.image)
+        output_path = base + '_degraded' + ext
+
+    degrader.save_image(output_path, degraded)
+    print(f'\n[保存] 退化结果 → {output_path}')
+    print('\n卷积退化完成！')
+
+
+# ─────────────────────────────────────────────────────────
 # 命令行入口
 # ─────────────────────────────────────────────────────────
 
@@ -321,8 +373,11 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
-        '--mode', choices=['mc', 'modtran'], default='mc',
-        help='运行模式：mc=纯蒙特卡洛演示，modtran=MODTRAN5优化仿真',
+        '--mode', choices=['mc', 'modtran', 'convolve'], default='mc',
+        help=(
+            '运行模式：mc=纯蒙特卡洛演示，modtran=MODTRAN5优化仿真，'
+            'convolve=已有图像与PSF直接卷积退化'
+        ),
     )
     # MC 参数
     parser.add_argument('--fog', choices=['thin', 'medium', 'thick'], default='medium',
@@ -346,8 +401,24 @@ def build_parser() -> argparse.ArgumentParser:
                         help='.tp7 文件路径（modtran 模式必填）')
     parser.add_argument('--plt', type=str, default=None,
                         help='.plt 文件路径（可选）')
+    # 图像路径（mc/modtran/convolve 共用）
     parser.add_argument('--image', type=str, default=None,
-                        help='输入场景图像 .npy 文件路径（可选）')
+                        help=(
+                            '输入图像文件路径（convolve 模式必填，modtran 模式可选）；'
+                            '支持格式：.npy、.png、.jpg、.jpeg、.tif、.tiff'
+                        ))
+    # convolve 模式专用参数
+    parser.add_argument('--psf', type=str, default=None,
+                        help='输入 PSF 文件路径（convolve 模式必填）；支持格式：.npy、.png 等')
+    parser.add_argument('--t_total', type=float, default=1.0,
+                        help='大气总透过率，取值 [0, 1]（convolve 模式）')
+    parser.add_argument('--l_path', type=float, default=0.0,
+                        help='路径辐射常量项（convolve 模式）')
+    parser.add_argument('--output', type=str, default=None,
+                        help=(
+                            '输出文件路径（convolve 模式）；'
+                            '若未提供则自动生成（如 image_degraded.npy）'
+                        ))
     return parser
 
 
@@ -362,6 +433,12 @@ def main():
         if args.tp7 is None:
             parser.error('--mode modtran 需要提供 --tp7 参数')
         run_modtran_optimized(args)
+    elif args.mode == 'convolve':
+        if args.image is None:
+            parser.error('--mode convolve 需要提供 --image 参数')
+        if args.psf is None:
+            parser.error('--mode convolve 需要提供 --psf 参数')
+        run_convolve_mode(args)
 
 
 if __name__ == '__main__':
